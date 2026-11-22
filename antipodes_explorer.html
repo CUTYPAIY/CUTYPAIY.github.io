@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>지구 반대편에 무엇이 있을까? (Antipodes Explorer)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet.js CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Google Fonts: Inter & Noto Sans KR & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #050811;
+            color: #f8fafc;
+            font-family: 'Inter', 'Noto Sans KR', sans-serif;
+            user-select: none;
+        }
+        .font-mono-tech {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        /* 가로 스와이프 슬라이더 스크롤바 숨김 */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* Leaflet 맵 전체 채우기 */
+        .leaflet-container {
+            width: 100% !important;
+            height: 100% !important;
+            background: #070c18 !important;
+            font-family: 'Inter', 'Noto Sans KR', sans-serif;
+        }
+        .leaflet-control-attribution {
+            background: rgba(9, 13, 24, 0.78) !important;
+            color: #94a3b8 !important;
+            font-size: 9px !important;
+            border-top-left-radius: 8px;
+        }
+        .leaflet-control-attribution a {
+            color: #38bdf8 !important;
+        }
+        /* 출발점 파란색 펄스 마커 */
+        @keyframes originPulse {
+            0% {
+                transform: scale(0.75);
+                opacity: 0.9;
+            }
+            100% {
+                transform: scale(2.6);
+                opacity: 0;
+            }
+        }
+        .origin-pulse-ring {
+            animation: originPulse 1.8s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+        }
+        /* 반대편 레드 타겟 링 */
+        @keyframes targetPulse {
+            0% {
+                transform: scale(0.8);
+                opacity: 0.85;
+            }
+            100% {
+                transform: scale(2.3);
+                opacity: 0;
+            }
+        }
+        .target-pulse-ring {
+            animation: targetPulse 2s ease-out infinite;
+        }
+    </style>
+</head>
+<body class="w-screen h-screen overflow-hidden flex flex-col bg-slate-950">
+
+    <!-- ===================================================================== -->
+    <!-- 상단 절반 (50vh): 출발 지점 (Origin Point) 가로 분할 지도           -->
+    <!-- ===================================================================== -->
+    <section id="topHalf" class="relative w-full h-[50vh] overflow-hidden">
+        <!-- Leaflet 출발 지도 -->
+        <div id="mapOrigin" class="w-full h-full z-0"></div>
+
+        <!-- 상단 플로팅 바: 가로 스와이프 슬라이더 + 우측 빠른 버튼 -->
+        <div class="absolute top-2.5 left-2.5 right-2.5 z-[400] flex items-center gap-2 pointer-events-none">
+            <!-- 가로 스와이프 가능한 프리셋 슬라이더 -->
+            <div id="presetSlider"
+                 class="pointer-events-auto flex-1 min-w-0 flex items-center gap-1.5 overflow-x-auto no-scrollbar bg-slate-950/85 backdrop-blur-md border border-slate-700/80 rounded-2xl px-2.5 py-1.5 shadow-2xl cursor-grab active:cursor-grabbing">
+
+                <!-- 1) 4개국 수도 -->
+                <button type="button" onclick="handlePresetClick(37.5665, 126.9780, '🇰🇷 한국 · 서울')"
+                        class="preset-btn shrink-0 px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/35 border border-cyan-400/50 text-cyan-200 text-xs font-bold transition whitespace-nowrap">
+                    🇰🇷 한국 · 서울
+                </button>
+                <button type="button" onclick="handlePresetClick(38.9072, -77.0369, '🇺🇸 미국 · 워싱턴 D.C.')"
+                        class="preset-btn shrink-0 px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-slate-100 text-xs font-semibold transition whitespace-nowrap">
+                    🇺🇸 미국 · 워싱턴 D.C.
+                </button>
+                <button type="button" onclick="handlePresetClick(35.6762, 139.6503, '🇯🇵 일본 · 도쿄')"
+                        class="preset-btn shrink-0 px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-slate-100 text-xs font-semibold transition whitespace-nowrap">
+                    🇯🇵 일본 · 도쿄
+                </button>
+                <button type="button" onclick="handlePresetClick(39.9042, 116.4074, '🇨🇳 중국 · 베이징')"
+                        class="preset-btn shrink-0 px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-slate-100 text-xs font-semibold transition whitespace-nowrap">
+                    🇨🇳 중국 · 베이징
+                </button>
+
+                <!-- 은은한 구분선 -->
+                <div class="shrink-0 h-5 w-[1px] bg-slate-700/90 mx-1"></div>
+
+                <!-- 2) 6대 대륙 빠른 이동 -->
+                <button type="button" onclick="handlePresetClick(34.0479, 100.6197, '🌏 아시아')"
+                        class="preset-btn shrink-0 px-2.5 py-1.5 rounded-xl bg-slate-900/90 hover:bg-indigo-500/25 border border-slate-700/80 hover:border-indigo-400/50 text-slate-200 text-xs font-medium transition whitespace-nowrap">
+                    🌏 아시아
+                </button>
+                <button type="button" onclick="handlePresetClick(48.8566, 2.3522, '🇪🇺 유럽')"
+                        class="preset-btn shrink-0 px-2.5 py-1.5 rounded-xl bg-slate-900/90 hover:bg-indigo-500/25 border border-slate-700/80 hover:border-indigo-400/50 text-slate-200 text-xs font-medium transition whitespace-nowrap">
+                    🇪🇺 유럽
+                </button>
+                <button type="button" onclick="handlePresetClick(39.8283, -98.5795, '🌎 북아메리카')"
+                        class="preset-btn shrink-0 px-2.5 py-1.5 rounded-xl bg-slate-900/90 hover:bg-indigo-500/25 border border-slate-700/80 hover:border-indigo-400/50 text-slate-200 text-xs font-medium transition whitespace-nowrap">
+                    🌎 북아메리카
+                </button>
+                <button type="button" onclick="handlePresetClick(-14.2350, -51.9253, '🌎 남아메리카')"
+                        class="preset-btn shrink-0 px-2.5 py-1.5 rounded-xl bg-slate-900/90 hover:bg-indigo-500/25 border border-slate-700/80 hover:border-indigo-400/50 text-slate-200 text-xs font-medium transition whitespace-nowrap">
+                    🌎 남아메리카
+                </button>
+                <button type="button" onclick="handlePresetClick(1.2921, 36.8219, '🌍 아프리카')"
+                        class="preset-btn shrink-0 px-2.5 py-1.5 rounded-xl bg-slate-900/90 hover:bg-indigo-500/25 border border-slate-700/80 hover:border-indigo-400/50 text-slate-200 text-xs font-medium transition whitespace-nowrap">
+                    🌍 아프리카
+                </button>
+                <button type="button" onclick="handlePresetClick(-25.2744, 133.7751, '🦘 오세아니아')"
+                        class="preset-btn shrink-0 px-2.5 py-1.5 rounded-xl bg-slate-900/90 hover:bg-indigo-500/25 border border-slate-700/80 hover:border-indigo-400/50 text-slate-200 text-xs font-medium transition whitespace-nowrap">
+                    🦘 오세아니아
+                </button>
+            </div>
+
+            <!-- 우측 빠른 버튼: 📍 내 위치 + 🛰️ 위성뷰 / 🗺️ 일반지도 토글 -->
+            <div class="pointer-events-auto shrink-0 flex items-center gap-1.5">
+                <button type="button" onclick="locateUser()"
+                        title="내 현재 위치로 이동"
+                        class="px-3 py-2 rounded-2xl bg-slate-950/90 hover:bg-cyan-500/20 backdrop-blur-md border border-cyan-500/40 text-cyan-300 text-xs font-bold shadow-xl transition active:scale-95 whitespace-nowrap">
+                    📍 내 위치
+                </button>
+                <button type="button" id="basemapToggleBtn" onclick="toggleBasemap()"
+                        class="px-3 py-2 rounded-2xl bg-slate-950/90 hover:bg-slate-800 backdrop-blur-md border border-slate-700/90 text-amber-300 text-xs font-bold shadow-xl transition active:scale-95 whitespace-nowrap">
+                    🛰️ 위성뷰
+                </button>
+            </div>
+        </div>
+
+        <!-- 상단 좌측 하단: 출발 지점 정보 칩 -->
+        <div class="absolute bottom-2.5 left-2.5 z-[400] bg-slate-950/85 backdrop-blur-md border border-cyan-500/35 rounded-2xl px-3.5 py-2 shadow-xl pointer-events-none max-w-[92vw]">
+            <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]"></span>
+                <span class="text-[11px] font-extrabold tracking-wider text-cyan-300 uppercase">출발 지점 · ORIGIN</span>
+                <span id="originPlaceLabel" class="text-xs sm:text-sm font-black text-white truncate">🇰🇷 한국 · 서울</span>
+            </div>
+            <div id="originCoordsLabel" class="text-[11px] font-mono-tech text-slate-300 mt-0.5">
+                37.5665° N, 126.9780° E
+            </div>
+        </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- 중앙 수평 구분선 (Horizontal Center Divider Bar)                     -->
+    <!-- ===================================================================== -->
+    <div id="centerDivider" class="relative z-[500] w-full h-7 shrink-0 bg-slate-950/95 border-y border-cyan-500/40 flex items-center justify-center shadow-[0_0_25px_rgba(6,182,212,0.25)]">
+        <!-- 관통선 장식 -->
+        <div class="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[1px] bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent"></div>
+        <!-- 12,742 km 코어 터널 배지 -->
+        <div class="relative z-10 px-3.5 py-0.5 rounded-full bg-slate-900 border border-cyan-400/60 shadow-lg flex items-center gap-2 text-[11px] sm:text-xs font-mono-tech font-bold text-cyan-200">
+            <span class="text-amber-400">🕳️</span>
+            <span>12,742 km CORE TUNNEL</span>
+            <span class="hidden sm:inline text-slate-400 font-sans font-semibold">· 지구 중심 직선 관통</span>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- 하단 절반 (50vh): 지구 반대편 출구 (Antipode Exit) 가로 분할 지도     -->
+    <!-- ===================================================================== -->
+    <section id="bottomHalf" class="relative w-full h-[50vh] overflow-hidden">
+        <!-- Leaflet 반대편 지도 -->
+        <div id="mapAntipode" class="w-full h-full z-0"></div>
+
+        <!-- 하단 좌측 상단: 반대편 출구 좌표 & 육지/바다 판별 배지 -->
+        <div class="absolute top-2.5 left-2.5 z-[400] bg-slate-950/85 backdrop-blur-md border border-rose-500/40 rounded-2xl px-3.5 py-2 shadow-xl pointer-events-none max-w-[92vw]">
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-[0_0_8px_#f43f5e]"></span>
+                <span class="text-[11px] font-extrabold tracking-wider text-rose-300 uppercase">지구 반대편 출구 · ANTIPODE</span>
+                <span id="terrainBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-400/30">
+                    분석 중...
+                </span>
+            </div>
+            <div class="flex items-center gap-2 mt-0.5 flex-wrap">
+                <span id="antipodeCoordsLabel" class="text-xs font-mono-tech font-bold text-white">
+                    37.5665° S, 53.0220° W
+                </span>
+                <span id="antipodeLocationName" class="text-xs text-slate-300 truncate max-w-[240px] sm:max-w-xs">
+                    위치를 조회하는 중...
+                </span>
+            </div>
+        </div>
+
+        <!-- 하단 우측/하단 플로팅 카드: 현장 사진 (Wikimedia Commons) + 고해상도 위성 클로즈업 스냅샷 -->
+        <div id="antipodePhotoCard"
+             class="pointer-events-auto z-[400] bg-slate-950/90 backdrop-blur-xl border border-slate-700/80 rounded-2xl p-2.5 shadow-2xl
+                    fixed bottom-2.5 left-2.5 right-2.5 sm:left-auto sm:right-3 sm:bottom-3 sm:w-[430px]">
+            <div class="flex items-center justify-between gap-2 mb-1.5 px-1">
+                <div class="flex items-center gap-1.5 min-w-0">
+                    <span class="text-sm">📸</span>
+                    <span id="photoCardTitle" class="text-xs font-extrabold text-white truncate">반대편 현장 & 위성 스냅샷</span>
+                </div>
+                <span id="photoSourceTag" class="shrink-0 text-[10px] font-mono-tech px-2 py-0.5 rounded-md bg-slate-800 text-slate-300">
+                    ESRI SAT + WIKI
+                </span>
+            </div>
+
+            <!-- 사진 & 위성 클로즈업 2분할 미리보기 -->
+            <div class="grid grid-cols-2 gap-2">
+                <!-- 왼쪽: Wikimedia Commons 지오태그 현장 사진 (없거나 로딩 시 안내 표시) -->
+                <div class="relative h-24 sm:h-28 rounded-xl overflow-hidden bg-slate-900 border border-slate-800 flex items-center justify-center">
+                    <img id="wikiFieldImg"
+                         src=""
+                         alt="지구 반대편 주변 현장 사진"
+                         class="hidden w-full h-full object-cover"
+                         onload="onWikiImgLoad()"
+                         onerror="onWikiImgError()">
+                    <div id="wikiPlaceholder" class="p-2 text-center flex flex-col items-center justify-center gap-1">
+                        <span id="wikiStatusIcon" class="text-lg">🌊</span>
+                        <span id="wikiStatusText" class="text-[10px] leading-tight text-slate-400 font-medium">
+                            주변 지오태그 현장 사진 탐색 중...
+                        </span>
+                    </div>
+                    <div class="absolute bottom-1 left-1 right-1 flex items-center justify-between gap-1 px-1.5 py-0.5 rounded bg-slate-950/75 text-[9px] text-slate-200 pointer-events-none">
+                        <span id="wikiCaptionText" class="truncate">현장 실사</span>
+                    </div>
+                </div>
+
+                <!-- 오른쪽: Esri World Imagery 고해상도 위성 클로즈업 스냅샷 (항상 표시) -->
+                <div class="relative h-24 sm:h-28 rounded-xl overflow-hidden bg-slate-900 border border-rose-500/30 flex items-center justify-center">
+                    <img id="satCloseupImg"
+                         src=""
+                         alt="지구 반대편 위성 확대 스냅샷"
+                         class="w-full h-full object-cover">
+                    <!-- 중앙 십자 조준선 -->
+                    <div class="absolute inset-0 pointer-events-none flex items-center justify-center">
+                        <div class="w-5 h-5 rounded-full border border-rose-400/90 shadow-[0_0_8px_rgba(244,63,94,0.8)] flex items-center justify-center">
+                            <div class="w-1 h-1 rounded-full bg-rose-400"></div>
+                        </div>
+                    </div>
+                    <div class="absolute bottom-1 left-1 right-1 flex items-center justify-between px-1.5 py-0.5 rounded bg-slate-950/75 text-[9px] font-mono-tech text-rose-200 pointer-events-none">
+                        <span>🛰️ ESRI 위성 확대</span>
+                        <span id="satZoomBadge">Z10</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        // =====================================================================
+        // 1. 전역 상태 & 지도 인스턴스 관리
+        // =====================================================================
+        let mapOrigin = null;
+        let mapAntipode = null;
+        let originMarker = null;
+        let antipodeMarker = null;
+
+        let originSatelliteLayer = null;
+        let originStandardLayer = null;
+        let antipodeSatelliteLayer = null;
+        let antipodeStandardLayer = null;
+
+        // 기본값: 🛰️ 위성뷰 활성화 (Esri World Imagery)
+        let isSatelliteMode = true;
+
+        let currentOrigin = {
+            lat: 37.5665,
+            lon: 126.9780,
+            label: '🇰🇷 한국 · 서울'
+        };
+
+        let lookupTimer = null;
+
+        // =====================================================================
+        // 2. 지도 초기화 & Resize / invalidateSize 보장
+        // =====================================================================
+        function initMaps() {
+            const anti = computeAntipode(currentOrigin.lat, currentOrigin.lon);
+
+            // 타일 레이어 생성 (Esri World Imagery 위성 & CartoDB Voyager 일반지도)
+            const esriUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+            const cartoUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+
+            originSatelliteLayer = L.tileLayer(esriUrl, {
+                maxZoom: 19,
+                attribution: '&copy; Esri, Maxar, Earthstar Geographics'
+            });
+            originStandardLayer = L.tileLayer(cartoUrl, {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap &copy; CARTO'
+            });
+
+            antipodeSatelliteLayer = L.tileLayer(esriUrl, {
+                maxZoom: 19,
+                attribution: '&copy; Esri, Maxar, Earthstar Geographics'
+            });
+            antipodeStandardLayer = L.tileLayer(cartoUrl, {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap &copy; CARTO'
+            });
+
+            // 상단 출발 지도 초기화 (50vh)
+            mapOrigin = L.map('mapOrigin', {
+                center: [currentOrigin.lat, currentOrigin.lon],
+                zoom: 6,
+                zoomControl: true,
+                layers: [originSatelliteLayer]
+            });
+
+            // 하단 반대편 지도 초기화 (50vh)
+            mapAntipode = L.map('mapAntipode', {
+                center: [anti.lat, anti.lon],
+                zoom: 6,
+                zoomControl: true,
+                layers: [antipodeSatelliteLayer]
+            });
+
+            // 파란색 펄스 출발 마커 (드래그 가능)
+            const originIcon = L.divIcon({
+                className: 'origin-custom-marker',
+                html: `
+                    <div class="relative flex items-center justify-center w-8 h-8 -ml-4 -mt-4 cursor-grab active:cursor-grabbing">
+                        <span class="absolute w-8 h-8 rounded-full bg-cyan-400/50 origin-pulse-ring"></span>
+                        <span class="relative w-4 h-4 rounded-full bg-cyan-400 border-[2.5px] border-white shadow-[0_0_12px_#22d3ee]"></span>
+                    </div>
+                `,
+                iconSize: [0, 0]
+            });
+
+            // 빨간색 타겟 반대편 마커
+            const antipodeIcon = L.divIcon({
+                className: 'antipode-custom-marker',
+                html: `
+                    <div class="relative flex items-center justify-center w-8 h-8 -ml-4 -mt-4 pointer-events-none">
+                        <span class="absolute w-8 h-8 rounded-full bg-rose-500/45 target-pulse-ring"></span>
+                        <span class="relative w-4 h-4 rounded-full bg-rose-500 border-[2.5px] border-white shadow-[0_0_14px_#f43f5e]"></span>
+                    </div>
+                `,
+                iconSize: [0, 0]
+            });
+
+            originMarker = L.marker([currentOrigin.lat, currentOrigin.lon], {
+                icon: originIcon,
+                draggable: true
+            }).addTo(mapOrigin);
+
+            antipodeMarker = L.marker([anti.lat, anti.lon], {
+                icon: antipodeIcon,
+                interactive: false
+            }).addTo(mapAntipode);
+
+            // 상단 지도 클릭 이벤트 -> 출발점 업데이트 & 반대편 이동
+            mapOrigin.on('click', (e) => {
+                setOriginPoint(e.latlng.lat, normalizeLon(e.latlng.lng), '선택한 출발 좌표', true);
+            });
+
+            // 출발 마커 드래그 이벤트 -> 실시간 반대편 좌표 동기화
+            originMarker.on('drag', (e) => {
+                const pos = e.target.getLatLng();
+                updateLabelsAndMarkerOnly(pos.lat, normalizeLon(pos.lng), '드래그 이동 중...');
+            });
+            originMarker.on('dragend', (e) => {
+                const pos = e.target.getLatLng();
+                setOriginPoint(pos.lat, normalizeLon(pos.lng), '드래그 지정 지점', true);
+            });
+
+            // 하단 반대편 지도 클릭 이벤트 -> 역대척점 계산 후 상단 지도 동기화
+            mapAntipode.on('click', (e) => {
+                const clickedAntiLat = e.latlng.lat;
+                const clickedAntiLon = normalizeLon(e.latlng.lng);
+                const reverseOrigin = computeAntipode(clickedAntiLat, clickedAntiLon);
+                setOriginPoint(reverseOrigin.lat, reverseOrigin.lon, '반대편 지도에서 역산된 지점', true);
+            });
+
+            // 초기 타일 렌더링 보정 및 리사이즈 리스너
+            refreshMapSizes();
+            window.addEventListener('resize', refreshMapSizes);
+
+            // 최초 반대편 정보 및 사진 조회
+            fetchAntipodeDetails(anti.lat, anti.lon);
+            updateSatelliteCloseup(anti.lat, anti.lon, 10);
+        }
+
+        function refreshMapSizes() {
+            requestAnimationFrame(() => {
+                if (mapOrigin) mapOrigin.invalidateSize({ animate: false });
+                if (mapAntipode) mapAntipode.invalidateSize({ animate: false });
+            });
+        }
+
+        // =====================================================================
+        // 3. 대척점(Antipode) 계산 및 좌표 포맷팅
+        // =====================================================================
+        function normalizeLon(lon) {
+            let wrapped = ((lon + 180) % 360 + 360) % 360 - 180;
+            return wrapped;
+        }
+
+        function computeAntipode(lat, lon) {
+            const clampedLat = Math.max(-90, Math.min(90, lat));
+            const wrappedLon = normalizeLon(lon);
+            const antiLat = -clampedLat;
+            const antiLon = wrappedLon > 0 ? wrappedLon - 180 : wrappedLon + 180;
+            return { lat: antiLat, lon: normalizeLon(antiLon) };
+        }
+
+        function formatLat(lat) {
+            const hemi = lat >= 0 ? 'N' : 'S';
+            return `${Math.abs(lat).toFixed(4)}° ${hemi}`;
+        }
+
+        function formatLon(lon) {
+            const hemi = lon >= 0 ? 'E' : 'W';
+            return `${Math.abs(lon).toFixed(4)}° ${hemi}`;
+        }
+
+        function updateLabelsAndMarkerOnly(lat, lon, labelText) {
+            const anti = computeAntipode(lat, lon);
+            document.getElementById('originPlaceLabel').textContent = labelText;
+            document.getElementById('originCoordsLabel').textContent = `${formatLat(lat)}, ${formatLon(lon)}`;
+            document.getElementById('antipodeCoordsLabel').textContent = `${formatLat(anti.lat)}, ${formatLon(anti.lon)}`;
+            antipodeMarker.setLatLng([anti.lat, anti.lon]);
+        }
+
+        function setOriginPoint(lat, lon, labelText, shouldFlyAntipode = true) {
+            const clampedLat = Math.max(-89.99, Math.min(89.99, lat));
+            const normLon = normalizeLon(lon);
+            currentOrigin = { lat: clampedLat, lon: normLon, label: labelText };
+
+            const anti = computeAntipode(clampedLat, normLon);
+
+            originMarker.setLatLng([clampedLat, normLon]);
+            antipodeMarker.setLatLng([anti.lat, anti.lon]);
+
+            document.getElementById('originPlaceLabel').textContent = labelText;
+            document.getElementById('originCoordsLabel').textContent = `${formatLat(clampedLat)}, ${formatLon(normLon)}`;
+            document.getElementById('antipodeCoordsLabel').textContent = `${formatLat(anti.lat)}, ${formatLon(anti.lon)}`;
+
+            if (shouldFlyAntipode && mapAntipode) {
+                const targetZoom = Math.max(mapAntipode.getZoom(), 5);
+                mapAntipode.flyTo([anti.lat, anti.lon], targetZoom, {
+                    duration: 1.1
+                });
+            }
+
+            updateSatelliteCloseup(anti.lat, anti.lon, 10);
+
+            // 연속 클릭/드래그 시 API 과호출 방지 디바운스
+            if (lookupTimer) clearTimeout(lookupTimer);
+            lookupTimer = setTimeout(() => {
+                fetchAntipodeDetails(anti.lat, anti.lon);
+            }, 220);
+        }
+
+        function handlePresetClick(lat, lon, label) {
+            setOriginPoint(lat, lon, label, true);
+            if (mapOrigin) {
+                const targetZoom = Math.max(mapOrigin.getZoom(), 5);
+                mapOrigin.flyTo([lat, lon], targetZoom, { duration: 0.9 });
+            }
+        }
+
+        // =====================================================================
+        // 4. 내 위치 찾기 & 위성뷰 / 일반지도 전환
+        // =====================================================================
+        function locateUser() {
+            const btnLabelEl = document.getElementById('originPlaceLabel');
+            if (!navigator.geolocation) {
+                btnLabelEl.textContent = '브라우저 위치 미지원 (서울 유지)';
+                return;
+            }
+            btnLabelEl.textContent = '📍 현재 위치 찾는 중...';
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const { latitude, longitude } = pos.coords;
+                    setOriginPoint(latitude, longitude, '📍 내 현재 위치', true);
+                    mapOrigin.flyTo([latitude, longitude], 10, { duration: 1.0 });
+                },
+                () => {
+                    setOriginPoint(37.5665, 126.9780, '🇰🇷 한국 · 서울 (위치 권한 필요)', true);
+                },
+                { enableHighAccuracy: true, timeout: 7000 }
+            );
+        }
+
+        function toggleBasemap() {
+            isSatelliteMode = !isSatelliteMode;
+            const btn = document.getElementById('basemapToggleBtn');
+
+            if (isSatelliteMode) {
+                if (mapOrigin.hasLayer(originStandardLayer)) mapOrigin.removeLayer(originStandardLayer);
+                if (!mapOrigin.hasLayer(originSatelliteLayer)) mapOrigin.addLayer(originSatelliteLayer);
+
+                if (mapAntipode.hasLayer(antipodeStandardLayer)) mapAntipode.removeLayer(antipodeStandardLayer);
+                if (!mapAntipode.hasLayer(antipodeSatelliteLayer)) mapAntipode.addLayer(antipodeSatelliteLayer);
+
+                btn.textContent = '🛰️ 위성뷰';
+            } else {
+                if (mapOrigin.hasLayer(originSatelliteLayer)) mapOrigin.removeLayer(originSatelliteLayer);
+                if (!mapOrigin.hasLayer(originStandardLayer)) mapOrigin.addLayer(originStandardLayer);
+
+                if (mapAntipode.hasLayer(antipodeSatelliteLayer)) mapAntipode.removeLayer(antipodeSatelliteLayer);
+                if (!mapAntipode.hasLayer(antipodeStandardLayer)) mapAntipode.addLayer(antipodeStandardLayer);
+
+                btn.textContent = '🗺️ 일반지도';
+            }
+        }
+
+        // =====================================================================
+        // 5. 역지오코딩(Nominatim), Wikimedia Commons 현장 사진 & Esri 위성 스냅샷
+        // =====================================================================
+        function latLonToTileXY(lat, lon, zoom) {
+            const latRad = (lat * Math.PI) / 180;
+            const n = Math.pow(2, zoom);
+            const xtile = Math.floor(((lon + 180) / 360) * n);
+            const ytile = Math.floor(
+                ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n
+            );
+            return { x: xtile, y: ytile };
+        }
+
+        function updateSatelliteCloseup(lat, lon, zoom = 10) {
+            const tile = latLonToTileXY(lat, lon, zoom);
+            const satImg = document.getElementById('satCloseupImg');
+            document.getElementById('satZoomBadge').textContent = `Z${zoom}`;
+            satImg.src = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${tile.y}/${tile.x}`;
+        }
+
+        function onWikiImgLoad() {
+            const img = document.getElementById('wikiFieldImg');
+            const placeholder = document.getElementById('wikiPlaceholder');
+            img.classList.remove('hidden');
+            placeholder.classList.add('hidden');
+        }
+
+        function onWikiImgError() {
+            const img = document.getElementById('wikiFieldImg');
+            const placeholder = document.getElementById('wikiPlaceholder');
+            const iconEl = document.getElementById('wikiStatusIcon');
+            const textEl = document.getElementById('wikiStatusText');
+            img.classList.add('hidden');
+            placeholder.classList.remove('hidden');
+            iconEl.textContent = '🛰️';
+            textEl.textContent = '현장 사진 대신 우측 위성 확대 뷰를 확인하세요';
+        }
+
+        async function fetchAntipodeDetails(antiLat, antiLon) {
+            const terrainBadge = document.getElementById('terrainBadge');
+            const locNameEl = document.getElementById('antipodeLocationName');
+            const wikiImg = document.getElementById('wikiFieldImg');
+            const wikiPlaceholder = document.getElementById('wikiPlaceholder');
+            const wikiIcon = document.getElementById('wikiStatusIcon');
+            const wikiText = document.getElementById('wikiStatusText');
+            const wikiCaption = document.getElementById('wikiCaptionText');
+
+            terrainBadge.textContent = '탐사 중...';
+            terrainBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700';
+
+            // 1) OpenStreetMap Nominatim Reverse Geocoding (육지 vs 바다 판별)
+            let isOcean = true;
+            try {
+                const nomUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${antiLat.toFixed(5)}&lon=${antiLon.toFixed(5)}&zoom=6&accept-language=ko`;
+                const res = await fetch(nomUrl, { headers: { 'Accept': 'application/json' } });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.display_name) {
+                        isOcean = false;
+                        const shortName = data.display_name.split(',').slice(0, 3).join(',').trim();
+                        locNameEl.textContent = `· ${shortName}`;
+                        terrainBadge.textContent = '🏔️ 육지 출구';
+                        terrainBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/40';
+                    } else {
+                        isOcean = true;
+                        locNameEl.textContent = '· 망망대해 한가운데';
+                        terrainBadge.textContent = '🌊 바다 출구';
+                        terrainBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-400/40';
+                    }
+                } else {
+                    throw new Error('Nominatim non-OK');
+                }
+            } catch (err) {
+                isOcean = true;
+                locNameEl.textContent = '· 외양 / 미상 해역';
+                terrainBadge.textContent = '🌊 바다 / 해역';
+                terrainBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-400/40';
+            }
+
+            // 2) Wikimedia Commons Geosearch API로 인근 지오태그 사진 조회
+            wikiImg.classList.add('hidden');
+            wikiPlaceholder.classList.remove('hidden');
+            wikiIcon.textContent = isOcean ? '🌊' : '📷';
+            wikiText.textContent = '주변 현장 사진 검색 중...';
+
+            try {
+                const radius = isOcean ? 250000 : 120000; // 바다일 경우 인근 섬/해안까지 넓게 탐색
+                const wikiUrl = `https://commons.wikimedia.org/w/api.php?action=query&generator=geosearch&ggscoord=${antiLat.toFixed(5)}|${antiLon.toFixed(5)}&ggsradius=${radius}&ggslimit=12&ggsnamespace=6&prop=imageinfo|coordinates&iiprop=url|extmetadata&iiurlwidth=480&format=json&origin=*`;
+                const wRes = await fetch(wikiUrl);
+                if (!wRes.ok) throw new Error('Wiki API error');
+                const wData = await wRes.json();
+
+                const pages = wData?.query?.pages ? Object.values(wData.query.pages) : [];
+                // 일반 사진 파일 필터링 (.jpg, .jpeg, .png, .webp)
+                const validPhotoPage = pages.find((p) => {
+                    const url = p?.imageinfo?.[0]?.thumburl || p?.imageinfo?.[0]?.url || '';
+                    return /\.(jpe?g|png|webp)$/i.test(url) && !/map|chart|diagram|flag|logo|icon/i.test(p.title || '');
+                });
+
+                if (validPhotoPage) {
+                    const info = validPhotoPage.imageinfo[0];
+                    const imgUrl = info.thumburl || info.url;
+                    const cleanTitle = (validPhotoPage.title || '현장 사진').replace(/^File:/i, '').replace(/\.[^.]+$/, '').replace(/_/g, ' ');
+                    wikiCaption.textContent = cleanTitle;
+                    wikiImg.src = imgUrl;
+                } else {
+                    wikiIcon.textContent = isOcean ? '🌊' : '🛰️';
+                    wikiText.textContent = isOcean
+                        ? '외양 한가운데로 현장 사진 없음 (위성 뷰 확인)'
+                        : '인근 등록 사진 없음 (위성 확대 뷰 확인)';
+                    wikiCaption.textContent = isOcean ? '대양 위성 스냅샷' : '육지 위성 스냅샷';
+                }
+            } catch (err) {
+                wikiIcon.textContent = '🛰️';
+                wikiText.textContent = '사진 불러오기 실패 · 우측 위성 스냅샷 표시 중';
+                wikiCaption.textContent = '위성 클로즈업';
+            }
+        }
+
+        // =====================================================================
+        // 6. 상단 프리셋 슬라이더 스와이프 / 마우스 드래그 / 휠 지원
+        // =====================================================================
+        function initSwipeableSlider() {
+            const slider = document.getElementById('presetSlider');
+            if (!slider) return;
+
+            let isMouseDown = false;
+            let startX = 0;
+            let scrollLeftStart = 0;
+            let draggedDistance = 0;
+
+            slider.addEventListener('mousedown', (e) => {
+                isMouseDown = true;
+                draggedDistance = 0;
+                startX = e.pageX - slider.offsetLeft;
+                scrollLeftStart = slider.scrollLeft;
+            });
+
+            slider.addEventListener('mouseleave', () => {
+                isMouseDown = false;
+            });
+
+            slider.addEventListener('mouseup', () => {
+                isMouseDown = false;
+                setTimeout(() => { draggedDistance = 0; }, 30);
+            });
+
+            slider.addEventListener('mousemove', (e) => {
+                if (!isMouseDown) return;
+                e.preventDefault();
+                const x = e.pageX - slider.offsetLeft;
+                const walk = (x - startX) * 1.4;
+                draggedDistance = Math.abs(x - startX);
+                slider.scrollLeft = scrollLeftStart - walk;
+            });
+
+            // 드래그 중 실수로 버튼 클릭이 발동되는 것 방지
+            slider.addEventListener('click', (e) => {
+                if (draggedDistance > 8) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            }, true);
+
+            // 마우스 휠을 가로 스크롤로 변환
+            slider.addEventListener('wheel', (e) => {
+                if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                    e.preventDefault();
+                    slider.scrollLeft += e.deltaY;
+                }
+            }, { passive: false });
+        }
+
+        // =====================================================================
+        // 7. 앱 시작
+        // =====================================================================
+        window.addEventListener('DOMContentLoaded', () => {
+            initSwipeableSlider();
+            initMaps();
+        });
+    </script>
+</body>
+</html>
